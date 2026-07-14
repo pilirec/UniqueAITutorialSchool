@@ -2,15 +2,25 @@
 
 ## Cursor Cloud specific instructions
 
-This repository is currently **documentation-only** (pre-implementation / spec stage). Tracked files:
+This repository contains the PRD (`docs/internal-smart-tutoring-prd-v1.md`) and a **runnable full-stack prototype** of the AI tutoring-school management platform ("UniqueAITutorialSchool").
 
-- `README.md` — project intro (Chinese) for "UniqueAITutorialSchool", an AI-driven tutoring-school management platform.
-- `docs/internal-smart-tutoring-prd-v1.md` — the product requirements document (PRD V1.0).
-- `LICENSE`.
+### Stack
 
-There is **no application code, dependency manifest (no `package.json` / `requirements.txt` / `pyproject.toml`), build system, test suite, or runnable service** yet. Consequently:
+- Next.js 15 (App Router, Turbopack) + TypeScript + TailwindCSS v4 + Recharts + TanStack Query.
+- Full-stack in one Next.js app: UI pages under `app/(main)/`, REST API under `app/api/`, domain logic under `lib/` (store, auth/RBAC, seed data, AI provider layer under `lib/ai/`).
+- No external database: local runs persist to `.data/db.json` (gitignored); on Vercel it falls back to in-memory storage seeded from `lib/seed.ts`.
+- AI calls go through an OpenAI-compatible client (`lib/ai/client.ts`) with a provider registry (`lib/ai/providers.ts`); the default `mock` provider needs no API key and returns deterministic demo results.
 
-- There is nothing to install, lint, test, build, or run. The environment update script is intentionally a no-op.
-- The PRD (`docs/internal-smart-tutoring-prd-v1.md`) only describes the *planned* stack: Next.js 15 + TypeScript frontend, FastAPI (Python 3.11+) backend, Celery + Redis for async AI tasks, PostgreSQL, object storage (MinIO/OSS), and external Chinese VLM APIs (Qwen-VL, Doubao). None of this is implemented.
+### Commands
 
-When application code and a dependency manifest are eventually added, update the environment update script to install the relevant dependencies, and update this section with how to run/lint/test/build the new service(s).
+- Install: `npm install`
+- Dev server: `npm run dev` (port 3000)
+- Lint: `npm run lint`
+- Production build: `npm run build`
+- No test suite yet.
+
+### Notes
+
+- Demo login is passwordless: pick one of the seeded roles (principal / grade leader / teacher) on `/login`; session is a cookie with the teacher id.
+- Real AI providers are configured at runtime on the settings page (principal role) or via `AI_PROVIDER` / `AI_MODEL` / `AI_API_KEY` / `AI_BASE_URL` env vars.
+- Grading tasks run asynchronously after the POST response via `next/server`'s `after()`; the frontend polls task status.
