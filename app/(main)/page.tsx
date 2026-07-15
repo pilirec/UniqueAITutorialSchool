@@ -15,7 +15,7 @@ interface AnalyticsResp {
   studentStats: Array<{ studentId: string; name: string; accuracy: number }>;
 }
 
-type TaskItem = Omit<GradingTask, "imageDataUrl"> & { hasImage: boolean };
+type TaskItem = GradingTask & { hasImage: boolean };
 
 export default function DashboardPage() {
   const { data: boot } = useBootstrap();

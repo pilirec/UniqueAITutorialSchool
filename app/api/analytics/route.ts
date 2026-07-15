@@ -8,8 +8,8 @@ import { aggregateKPStats, tasksForClasses } from "@/lib/analytics";
 export async function GET(req: Request) {
   const { user, error } = await requireUser();
   if (error) return error;
-  const db = getDB();
-  const visible = visibleClassIds(user);
+  const db = await getDB();
+  const visible = visibleClassIds(db, user);
   const { searchParams } = new URL(req.url);
   const classId = searchParams.get("classId");
 
@@ -21,7 +21,7 @@ export async function GET(req: Request) {
     scope = visible;
   }
 
-  const tasks = tasksForClasses(scope).filter((t) => t.status === "success");
+  const tasks = tasksForClasses(db, scope).filter((t) => t.status === "success");
   const kpStats = aggregateKPStats(tasks);
 
   // 学生维度：正确率排名

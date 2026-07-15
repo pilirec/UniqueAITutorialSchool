@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { api, ROLE_LABELS } from "@/lib/client-api";
+import { SYSTEM_NAME, DEFAULT_SCHOOL_NAME } from "@/lib/constants";
 import { Spinner } from "@/components/ui";
 import clsx from "clsx";
 
@@ -28,19 +29,23 @@ export default function LoginPage() {
   const router = useRouter();
   const [accounts, setAccounts] = useState<DemoAccount[]>([]);
   const [schoolName, setSchoolName] = useState("");
+  const [logoSrc, setLogoSrc] = useState("");
   const [selected, setSelected] = useState<string>("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
   useEffect(() => {
-    api<{ user: DemoAccount | null; school: { name: string }; demoAccounts: DemoAccount[] }>(
-      "/api/auth/me"
-    ).then((data) => {
+    api<{
+      user: DemoAccount | null;
+      school: { name: string; logoSrc: string };
+      demoAccounts: DemoAccount[];
+    }>("/api/auth/me").then((data) => {
       if (data.user) {
         router.replace("/");
         return;
       }
       setSchoolName(data.school.name);
+      setLogoSrc(data.school.logoSrc);
       setAccounts(data.demoAccounts);
       setSelected(data.demoAccounts[0]?.id ?? "");
     });
@@ -66,12 +71,21 @@ export default function LoginPage() {
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-indigo-600 via-indigo-500 to-sky-500 p-4">
       <div className="w-full max-w-md bg-white rounded-2xl shadow-2xl p-8">
         <div className="text-center mb-6">
-          <div className="text-4xl mb-2">🎓</div>
+          {logoSrc ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={logoSrc}
+              alt="校区 Logo"
+              className="w-14 h-14 rounded-xl object-contain mx-auto mb-2"
+            />
+          ) : (
+            <div className="text-4xl mb-2">🎓</div>
+          )}
           <h1 className="text-xl font-bold text-slate-800">
-            {schoolName || "启明智慧托辅中心"}
+            {schoolName || DEFAULT_SCHOOL_NAME}
           </h1>
           <p className="text-sm text-slate-500 mt-1">
-            AI 智能化学管系统 · 原型演示（V1.0）
+            {SYSTEM_NAME} · 原型演示（V1.0）
           </p>
         </div>
 

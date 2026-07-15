@@ -18,10 +18,7 @@ import {
 } from "@/components/ui";
 import type { GradingTask, Subject } from "@/lib/types";
 
-type TaskItem = Omit<GradingTask, "imageDataUrl"> & {
-  hasImage: boolean;
-  imageDataUrl?: string;
-};
+type TaskItem = GradingTask & { hasImage: boolean };
 
 function GradingPageInner() {
   const { data: boot } = useBootstrap();
@@ -222,10 +219,10 @@ function GradingPageInner() {
             )}
             {task?.status === "success" && (
               <div className="space-y-3">
-                {task.imageDataUrl && (
+                {task.imageSrc && (
                   // eslint-disable-next-line @next/next/no-img-element
                   <img
-                    src={task.imageDataUrl}
+                    src={task.imageSrc}
                     alt="作业照片"
                     className="max-h-44 rounded-lg border border-slate-200"
                   />

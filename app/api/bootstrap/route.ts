@@ -7,8 +7,8 @@ import { visibleClassIds } from "@/lib/auth";
 export async function GET() {
   const { user, error } = await requireUser();
   if (error) return error;
-  const db = getDB();
-  const classIds = visibleClassIds(user);
+  const db = await getDB();
+  const classIds = visibleClassIds(db, user);
   const classes = db.classes.filter((c) => classIds.has(c.id));
   const gradeIds = new Set(classes.map((c) => c.gradeId));
   const grades =

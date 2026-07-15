@@ -4,22 +4,28 @@ import { getDB, saveDB, uid } from "@/lib/store";
 import { requireUser, jsonError } from "@/lib/api-helpers";
 import { visibleClassIds } from "@/lib/auth";
 import { runGrading } from "@/lib/ai/grading";
+import { putImage } from "@/lib/storage";
 import type { GradingTask, Subject } from "@/lib/types";
 
 // Vercel 函数最长执行时间（真实 VLM 批改可能需要数十秒；Hobby 计划上限见 README）
 export const maxDuration = 60;
 
-function taskListItem(t: ReturnType<typeof getDB>["gradingTasks"][number]) {
-  const { imageDataUrl, ...rest } = t;
-  return { ...rest, hasImage: Boolean(imageDataUrl) };
+function taskListItem(t: GradingTask) {
+  const { imageSrc, ...rest } = t;
+  return {
+    ...rest,
+    hasImage: Boolean(imageSrc),
+    // 内联 base64 图片较大，列表不返回；对象存储 / 本地文件 URL 很小，直接返回
+    imageSrc: imageSrc.startsWith("data:") ? "" : imageSrc,
+  };
 }
 
 /** 任务列表（当前用户可见范围） */
 export async function GET() {
   const { user, error } = await requireUser();
   if (error) return error;
-  const db = getDB();
-  const classIds = visibleClassIds(user);
+  const db = await getDB();
+  const classIds = visibleClassIds(db, user);
   const tasks = db.gradingTasks
     .filter((t) => (t.classId ? classIds.has(t.classId) : t.teacherId === user.id))
     .sort((a, b) => +new Date(b.createdAt) - +new Date(a.createdAt))
@@ -28,7 +34,8 @@ export async function GET() {
 }
 
 /**
- * 创建批改任务：教师拍照上传 → 立即返回 task_id → 后台异步调用 VLM → 前端轮询。
+ * 创建批改任务：教师拍照上传 → 图片入对象存储 → 立即返回 task_id →
+ * 后台异步调用 VLM → 前端轮询。
  * （原型用 after() 模拟 Celery 异步队列，生产版见 PRD 5.2/6）
  */
 export async function POST(req: Request) {
@@ -40,22 +47,23 @@ export async function POST(req: Request) {
     studentId?: string;
     subject?: Subject;
   };
-  if (!body.imageDataUrl?.startsWith("data:image/")) {
+  const imageDataUrl = body.imageDataUrl;
+  if (!imageDataUrl?.startsWith("data:image/")) {
     return jsonError("请上传作业照片");
   }
   const subject: Subject = body.subject === "chinese" ? "chinese" : "math";
-  const db = getDB();
+  const db = await getDB();
 
   let classId: string | undefined;
   if (body.studentId) {
     const student = db.students.find((s) => s.id === body.studentId);
     if (!student) return jsonError("学生不存在", 404);
-    if (!visibleClassIds(user).has(student.classId)) return jsonError("无权限", 403);
+    if (!visibleClassIds(db, user).has(student.classId)) return jsonError("无权限", 403);
     classId = student.classId;
   }
 
   // 幂等键：teacher_id + image_md5（PRD 第 6 节）
-  const imageMd5 = createHash("md5").update(body.imageDataUrl).digest("hex");
+  const imageMd5 = createHash("md5").update(imageDataUrl).digest("hex");
   const existing = db.gradingTasks.find(
     (t) =>
       t.teacherId === user.id &&
@@ -67,6 +75,13 @@ export async function POST(req: Request) {
     return NextResponse.json({ task: taskListItem(existing), deduplicated: true });
   }
 
+  let imageSrc: string;
+  try {
+    imageSrc = await putImage(`tasks/${imageMd5}`, imageDataUrl);
+  } catch (e) {
+    return jsonError(e instanceof Error ? `图片存储失败：${e.message}` : "图片存储失败", 502);
+  }
+
   const settings = db.aiSettings;
   const task: GradingTask = {
     id: uid("TASK"),
@@ -76,7 +91,7 @@ export async function POST(req: Request) {
     classId,
     subject,
     imageMd5,
-    imageDataUrl: body.imageDataUrl,
+    imageSrc,
     imageName: body.imageName,
     status: "processing" as const,
     provider: settings.provider,
@@ -85,14 +100,14 @@ export async function POST(req: Request) {
     createdAt: new Date().toISOString(),
   };
   db.gradingTasks.push(task);
-  saveDB();
+  await saveDB();
 
   // 异步执行 AI 批改（响应返回后继续运行；本地与 Vercel 均支持）
   after(async () => {
     try {
       const { results, overallComment } = await runGrading({
         settings,
-        imageDataUrl: task.imageDataUrl,
+        imageDataUrl,
         imageMd5,
         subject,
         knowledgePoints: db.knowledgePoints,
@@ -105,7 +120,7 @@ export async function POST(req: Request) {
       task.error = e instanceof Error ? e.message : "批改失败";
     }
     task.finishedAt = new Date().toISOString();
-    saveDB();
+    await saveDB();
   });
 
   return NextResponse.json({ task: taskListItem(task) });

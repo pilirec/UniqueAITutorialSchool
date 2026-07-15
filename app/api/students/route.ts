@@ -25,8 +25,8 @@ export async function POST(req: Request) {
   const inputs: StudentInput[] = body.students ?? [body];
   if (inputs.length === 0) return jsonError("无导入数据");
 
-  const db = getDB();
-  const classIds = visibleClassIds(user);
+  const db = await getDB();
+  const classIds = visibleClassIds(db, user);
   const created: Student[] = [];
   const errors: string[] = [];
 
@@ -55,7 +55,7 @@ export async function POST(req: Request) {
   });
 
   db.students.push(...created);
-  saveDB();
+  await saveDB();
   return NextResponse.json({ created, errors });
 }
 
@@ -64,11 +64,11 @@ export async function DELETE(req: Request) {
   if (error) return error;
   const { searchParams } = new URL(req.url);
   const id = searchParams.get("id");
-  const db = getDB();
+  const db = await getDB();
   const student = db.students.find((s) => s.id === id);
   if (!student) return jsonError("学生不存在", 404);
-  if (!visibleClassIds(user).has(student.classId)) return jsonError("无权限", 403);
+  if (!visibleClassIds(db, user).has(student.classId)) return jsonError("无权限", 403);
   db.students = db.students.filter((s) => s.id !== id);
-  saveDB();
+  await saveDB();
   return NextResponse.json({ ok: true });
 }

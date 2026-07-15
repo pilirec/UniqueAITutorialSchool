@@ -1,5 +1,4 @@
-import { getDB } from "./store";
-import type { GradingTask } from "./types";
+import type { DB, GradingTask } from "./types";
 
 export interface KPStat {
   kpId: string;
@@ -43,10 +42,10 @@ export function aggregateKPStats(tasks: GradingTask[]): KPStat[] {
   return [...map.values()].sort((a, b) => b.wrongRate - a.wrongRate || b.total - a.total);
 }
 
-export function tasksForStudent(studentId: string): GradingTask[] {
-  return getDB().gradingTasks.filter((t) => t.studentId === studentId);
+export function tasksForStudent(db: DB, studentId: string): GradingTask[] {
+  return db.gradingTasks.filter((t) => t.studentId === studentId);
 }
 
-export function tasksForClasses(classIds: Set<string>): GradingTask[] {
-  return getDB().gradingTasks.filter((t) => t.classId && classIds.has(t.classId));
+export function tasksForClasses(db: DB, classIds: Set<string>): GradingTask[] {
+  return db.gradingTasks.filter((t) => t.classId && classIds.has(t.classId));
 }

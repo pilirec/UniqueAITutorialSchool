@@ -12,10 +12,10 @@ export async function POST(
   const { user, error } = await requireUser();
   if (error) return error;
   const { id } = await params;
-  const db = getDB();
+  const db = await getDB();
   const student = db.students.find((s) => s.id === id);
   if (!student) return jsonError("学生不存在", 404);
-  if (!visibleClassIds(user).has(student.classId)) return jsonError("无权限", 403);
+  if (!visibleClassIds(db, user).has(student.classId)) return jsonError("无权限", 403);
 
   const body = (await req.json()) as { text?: string; type?: string };
   const text = body.text?.trim();
@@ -43,6 +43,6 @@ export async function POST(
     createdAt: new Date().toISOString(),
   };
   db.behaviorRecords.push(record);
-  saveDB();
+  await saveDB();
   return NextResponse.json(record);
 }

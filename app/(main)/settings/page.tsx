@@ -1,10 +1,11 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import clsx from "clsx";
 import { useBootstrap } from "@/lib/hooks";
-import { api } from "@/lib/client-api";
+import { api, compressImage } from "@/lib/client-api";
+import { SYSTEM_NAME } from "@/lib/constants";
 import {
   Card,
   CardHeader,
@@ -25,7 +26,24 @@ interface SettingsResp {
     apiKeyMasked: string;
     hasApiKey: boolean;
   };
+  infra: {
+    dbDriver: "postgres" | "file" | "memory";
+    storageDriver: "blob" | "s3" | "local" | "inline";
+  };
 }
+
+const DB_DRIVER_LABELS: Record<string, string> = {
+  postgres: "PostgreSQL（Supabase / 自建）",
+  file: "本地 JSON 文件（.data/db.json）",
+  memory: "内存（冷启动重置为种子数据）",
+};
+
+const STORAGE_DRIVER_LABELS: Record<string, string> = {
+  blob: "Vercel Blob 对象存储",
+  s3: "S3 兼容对象存储（OSS / MinIO 等）",
+  local: "本地文件（.data/uploads）",
+  inline: "base64 内联存入数据库",
+};
 
 export default function SettingsPage() {
   const { data: boot } = useBootstrap();
@@ -41,6 +59,12 @@ export default function SettingsPage() {
   const [baseUrl, setBaseUrl] = useState("");
   const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(null);
 
+  // 校区信息
+  const logoInputRef = useRef<HTMLInputElement>(null);
+  const [schoolName, setSchoolName] = useState<string | null>(null);
+  const [logoPreview, setLogoPreview] = useState<string | null>(null); // null=不变，""=清除
+  const [schoolMessage, setSchoolMessage] = useState<{ ok: boolean; text: string } | null>(null);
+
   useEffect(() => {
     if (data && !providerId) {
       setProviderId(data.settings.provider);
@@ -48,6 +72,35 @@ export default function SettingsPage() {
       setBaseUrl(data.settings.baseUrl);
     }
   }, [data, providerId]);
+
+  const saveSchool = useMutation({
+    mutationFn: () =>
+      api("/api/settings/school", {
+        method: "PUT",
+        body: JSON.stringify({
+          name: schoolName ?? undefined,
+          logoDataUrl: logoPreview ?? undefined,
+        }),
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["bootstrap"] });
+      setLogoPreview(null);
+      if (logoInputRef.current) logoInputRef.current.value = "";
+      setSchoolMessage({ ok: true, text: "校区信息已保存" });
+    },
+    onError: (e) => setSchoolMessage({ ok: false, text: e.message }),
+  });
+
+  async function onLogoChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    try {
+      setLogoPreview(await compressImage(file, 256));
+      setSchoolMessage(null);
+    } catch (err) {
+      setSchoolMessage({ ok: false, text: err instanceof Error ? err.message : "图片处理失败" });
+    }
+  }
 
   const save = useMutation({
     mutationFn: () =>
@@ -97,10 +150,134 @@ export default function SettingsPage() {
     ["聚合平台 / 自定义（OpenAI 兼容协议）", aggregators],
   ];
 
+  const effectiveLogo = logoPreview !== null ? logoPreview : boot.school.logoSrc;
+
   return (
     <div className="space-y-5">
       <div>
-        <h1 className="text-xl font-bold text-slate-800">AI 模型设置</h1>
+        <h1 className="text-xl font-bold text-slate-800">设置</h1>
+        <p className="text-sm text-slate-500 mt-0.5">
+          校区信息 · AI 模型接入 · 存储与部署状态（{SYSTEM_NAME}）
+        </p>
+      </div>
+
+      {!isPrincipal && (
+        <div className="rounded-lg bg-amber-50 border border-amber-200 p-3 text-sm text-amber-700">
+          🔒 仅校长角色可修改设置（RBAC 权限控制），当前为只读展示。
+        </div>
+      )}
+
+      <div className="grid lg:grid-cols-2 gap-5 items-start">
+        <Card>
+          <CardHeader
+            title="校区信息"
+            subtitle={`校区名称与 Logo 将展示在登录页与侧边栏（系统名称固定为「${SYSTEM_NAME}」）`}
+          />
+          <div className="px-5 pb-5 space-y-3">
+            <div className="flex items-center gap-4">
+              <input
+                ref={logoInputRef}
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={onLogoChange}
+              />
+              <button
+                onClick={() => isPrincipal && logoInputRef.current?.click()}
+                disabled={!isPrincipal}
+                className={clsx(
+                  "w-20 h-20 shrink-0 rounded-xl border-2 border-dashed flex items-center justify-center overflow-hidden transition-colors",
+                  isPrincipal
+                    ? "border-slate-300 hover:border-indigo-400 cursor-pointer"
+                    : "border-slate-200 cursor-not-allowed"
+                )}
+                title="点击上传 Logo"
+              >
+                {effectiveLogo ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={effectiveLogo} alt="校区 Logo" className="w-full h-full object-contain" />
+                ) : (
+                  <span className="text-3xl">🎓</span>
+                )}
+              </button>
+              <div className="flex-1 space-y-2">
+                <Field label="校区名称">
+                  <input
+                    className={inputCls}
+                    value={schoolName ?? boot.school.name}
+                    onChange={(e) => setSchoolName(e.target.value)}
+                    disabled={!isPrincipal}
+                    maxLength={30}
+                  />
+                </Field>
+                {isPrincipal && (
+                  <p className="text-xs text-slate-400">
+                    点击左侧图标上传 Logo（自动压缩至 256px）
+                    {(effectiveLogo || logoPreview !== null) && (
+                      <button
+                        onClick={() => setLogoPreview("")}
+                        className="text-red-400 hover:text-red-500 ml-2 underline"
+                      >
+                        恢复默认图标
+                      </button>
+                    )}
+                  </p>
+                )}
+              </div>
+            </div>
+            {isPrincipal && (
+              <div className="flex items-center gap-3">
+                <Button
+                  onClick={() => saveSchool.mutate()}
+                  disabled={saveSchool.isPending || (schoolName !== null && !schoolName.trim())}
+                >
+                  {saveSchool.isPending ? "保存中…" : "保存校区信息"}
+                </Button>
+                {schoolMessage && (
+                  <p className={clsx("text-sm", schoolMessage.ok ? "text-emerald-600" : "text-red-500")}>
+                    {schoolMessage.text}
+                  </p>
+                )}
+              </div>
+            )}
+          </div>
+        </Card>
+
+        <Card>
+          <CardHeader
+            title="存储与部署状态"
+            subtitle="数据库与对象存储驱动按环境变量自动选择，也可显式指定"
+          />
+          <div className="px-5 pb-5 space-y-3">
+            <div className="flex items-center gap-2 flex-wrap text-sm">
+              <span className="text-slate-500 w-20">数据库</span>
+              <Badge color={data.infra.dbDriver === "memory" ? "amber" : "green"}>
+                {DB_DRIVER_LABELS[data.infra.dbDriver] ?? data.infra.dbDriver}
+              </Badge>
+            </div>
+            <div className="flex items-center gap-2 flex-wrap text-sm">
+              <span className="text-slate-500 w-20">图片存储</span>
+              <Badge color={data.infra.storageDriver === "inline" ? "amber" : "green"}>
+                {STORAGE_DRIVER_LABELS[data.infra.storageDriver] ?? data.infra.storageDriver}
+              </Badge>
+            </div>
+            <ul className="text-xs text-slate-500 space-y-1.5 leading-relaxed list-disc pl-4 pt-1">
+              <li>
+                数据库：配置 POSTGRES_URL / DATABASE_URL（如 Vercel 的 Supabase 集成）自动启用
+                Postgres；本地默认 JSON 文件；也可用 DB_DRIVER 显式指定。
+              </li>
+              <li>
+                图片存储：配置 BLOB_READ_WRITE_TOKEN（Vercel Blob）或 S3_*（阿里云 OSS / MinIO
+                等 S3 兼容）自动启用；本地默认写入 .data/uploads；也可用 STORAGE_DRIVER 显式指定。
+              </li>
+              <li>未配置任何后端时降级为内存 + 内联存储，仍可完整体验演示流程。</li>
+            </ul>
+          </div>
+        </Card>
+      </div>
+
+      <div>
+        <h2 className="text-lg font-bold text-slate-800">AI 模型设置</h2>
         <p className="text-sm text-slate-500 mt-0.5">
           识图批改与行为分析的多模态 / 大语言模型接入，支持 {data.providers.length - 1}+
           提供商（不限于千问 VL 与豆包 Seed）
@@ -119,12 +296,6 @@ export default function SettingsPage() {
           </Badge>
         )}
       </Card>
-
-      {!isPrincipal && (
-        <div className="rounded-lg bg-amber-50 border border-amber-200 p-3 text-sm text-amber-700">
-          🔒 仅校长角色可修改模型配置（RBAC 权限控制），当前为只读展示。
-        </div>
-      )}
 
       <div className="grid lg:grid-cols-3 gap-5 items-start">
         <div className="lg:col-span-2 space-y-4">

@@ -16,7 +16,7 @@ export async function POST(req: Request) {
     classIds?: string[];
   };
   if (!body.name?.trim()) return jsonError("请填写教师姓名");
-  const db = getDB();
+  const db = await getDB();
   const teacher = {
     id: uid("T"),
     schoolId: db.school.id,
@@ -27,7 +27,7 @@ export async function POST(req: Request) {
     classIds: body.classIds ?? [],
   };
   db.teachers.push(teacher);
-  saveDB();
+  await saveDB();
   return NextResponse.json(teacher);
 }
 
@@ -39,11 +39,11 @@ export async function DELETE(req: Request) {
   const id = searchParams.get("id");
   if (!id) return jsonError("参数错误");
   if (id === user.id) return jsonError("不能删除自己");
-  const db = getDB();
+  const db = await getDB();
   db.teachers = db.teachers.filter((t) => t.id !== id);
   db.classes.forEach((c) => {
     if (c.headTeacherId === id) c.headTeacherId = undefined;
   });
-  saveDB();
+  await saveDB();
   return NextResponse.json({ ok: true });
 }
