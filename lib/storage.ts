@@ -76,13 +76,34 @@ export async function putImage(key: string, dataUrl: string): Promise<string> {
 
   if (driver === "blob") {
     const { put } = await import("@vercel/blob");
-    const res = await put(fullKey, buffer, {
-      access: "public",
-      contentType,
-      addRandomSuffix: false,
-      allowOverwrite: true,
-    });
-    return res.url;
+    const g = globalThis as unknown as { __blobAccess?: "public" | "private" };
+    const access = process.env.BLOB_ACCESS === "private" ? "private" : (g.__blobAccess ?? "public");
+    try {
+      const res = await put(fullKey, buffer, {
+        access,
+        contentType,
+        addRandomSuffix: false,
+        allowOverwrite: true,
+      });
+      g.__blobAccess = access;
+      // 私有桶的 blob.url 不可公开访问，经服务端代理读取
+      if (access === "private") return `/api/files/${encodeURIComponent(fullKey)}`;
+      return res.url;
+    } catch (e) {
+      // 桶为私有访问模式时，public 上传会报错 —— 自动降级为 private 并记住
+      const msg = e instanceof Error ? e.message : String(e);
+      if (access === "public" && /private/i.test(msg)) {
+        await put(fullKey, buffer, {
+          access: "private",
+          contentType,
+          addRandomSuffix: false,
+          allowOverwrite: true,
+        });
+        g.__blobAccess = "private";
+        return `/api/files/${encodeURIComponent(fullKey)}`;
+      }
+      throw e;
+    }
   }
 
   if (driver === "s3") {
@@ -123,6 +144,20 @@ export async function readImage(
   const localPath = path.join(UPLOADS_DIR, safeName.replace(/\//g, "_"));
   if (fs.existsSync(localPath)) {
     return { body: fs.readFileSync(localPath), contentType };
+  }
+
+  // 私有 Vercel Blob 桶：经服务端读取后代理返回
+  if (process.env.BLOB_READ_WRITE_TOKEN) {
+    try {
+      const { get } = await import("@vercel/blob");
+      const result = await get(key, { access: "private" });
+      if (result) {
+        const bytes = new Uint8Array(await new Response(result.stream).arrayBuffer());
+        return { body: bytes, contentType: result.blob.contentType || contentType };
+      }
+    } catch {
+      // 继续尝试其他来源
+    }
   }
 
   if (s3Configured()) {
