@@ -7,6 +7,6 @@ export async function POST() {
   const { user, error } = await requireUser();
   if (error) return error;
   if (user.role !== "principal") return jsonError("仅校长可重置演示数据", 403);
-  resetDB();
+  await resetDB();
   return NextResponse.json({ ok: true });
 }

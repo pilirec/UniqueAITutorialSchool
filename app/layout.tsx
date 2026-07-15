@@ -1,10 +1,11 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import Providers from "./providers";
+import { SYSTEM_NAME } from "@/lib/constants";
 
 export const metadata: Metadata = {
-  title: "启明智慧托辅 · 学管系统",
-  description: "AI 驱动的托辅班教学管理平台原型（拍照批改 / 学情分析 / 学生建档）",
+  title: SYSTEM_NAME,
+  description: `${SYSTEM_NAME} · AI 驱动的托辅班教学管理平台原型（拍照批改 / 学情分析 / 学生建档）`,
 };
 
 export const viewport: Viewport = {

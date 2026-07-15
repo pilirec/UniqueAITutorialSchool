@@ -1,3 +1,4 @@
+import { DEFAULT_SCHOOL_NAME } from "./constants";
 import type {
   DB,
   Grade,
@@ -213,7 +214,7 @@ export function buildSeed(): DB {
       classId: s.classId,
       subject: s.results[0].matchedKnowledgePoint!.subject,
       imageMd5: `seedmd5${i}`,
-      imageDataUrl: "",
+      imageSrc: "",
       imageName: "作业照片（演示数据）.jpg",
       status: "success",
       provider: "mock",
@@ -277,7 +278,7 @@ export function buildSeed(): DB {
   ];
 
   return {
-    school: { id: schoolId, name: "启明智慧托辅中心" },
+    school: { id: schoolId, name: DEFAULT_SCHOOL_NAME, logoSrc: "" },
     grades,
     classes,
     teachers,

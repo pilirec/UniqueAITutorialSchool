@@ -7,6 +7,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import clsx from "clsx";
 import { useBootstrap } from "@/lib/hooks";
 import { api, ROLE_LABELS } from "@/lib/client-api";
+import { SYSTEM_NAME } from "@/lib/constants";
 import { Spinner } from "@/components/ui";
 
 const NAV_ITEMS = [
@@ -16,7 +17,7 @@ const NAV_ITEMS = [
   { href: "/analytics", label: "学情看板", icon: "📈" },
   { href: "/org", label: "组织管理", icon: "🗂️" },
   { href: "/knowledge", label: "知识点", icon: "📚" },
-  { href: "/settings", label: "AI 设置", icon: "⚙️" },
+  { href: "/settings", label: "设置", icon: "⚙️" },
 ];
 
 export default function MainLayout({ children }: { children: React.ReactNode }) {
@@ -52,12 +53,21 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
       <aside className="hidden md:flex flex-col w-56 shrink-0 bg-white border-r border-slate-200 sticky top-0 h-screen">
         <div className="px-5 py-4 border-b border-slate-100">
           <div className="flex items-center gap-2">
-            <span className="text-2xl">🎓</span>
-            <div>
-              <p className="font-bold text-slate-800 text-sm leading-tight">
+            {data.school.logoSrc ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={data.school.logoSrc}
+                alt="校区 Logo"
+                className="w-8 h-8 rounded-lg object-contain shrink-0"
+              />
+            ) : (
+              <span className="text-2xl">🎓</span>
+            )}
+            <div className="min-w-0">
+              <p className="font-bold text-slate-800 text-sm leading-tight truncate">
                 {data.school.name}
               </p>
-              <p className="text-[10px] text-slate-400">AI 学管系统 V1.0 原型</p>
+              <p className="text-[10px] text-slate-400 truncate">{SYSTEM_NAME} V1.0</p>
             </div>
           </div>
         </div>
@@ -102,9 +112,20 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
       {/* 移动端顶栏 */}
       <div className="flex-1 flex flex-col min-w-0">
         <header className="md:hidden sticky top-0 z-20 bg-white border-b border-slate-200 px-4 py-3 flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <span className="text-xl">🎓</span>
-            <span className="font-bold text-sm text-slate-800">{data.school.name}</span>
+          <div className="flex items-center gap-2 min-w-0">
+            {data.school.logoSrc ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={data.school.logoSrc}
+                alt="校区 Logo"
+                className="w-6 h-6 rounded object-contain shrink-0"
+              />
+            ) : (
+              <span className="text-xl">🎓</span>
+            )}
+            <span className="font-bold text-sm text-slate-800 truncate">
+              {data.school.name}
+            </span>
           </div>
           <button onClick={logout} className="text-xs text-slate-500">
             {data.user.name} · 退出

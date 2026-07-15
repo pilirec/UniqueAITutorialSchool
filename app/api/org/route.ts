@@ -15,7 +15,7 @@ export async function POST(req: Request) {
     gradeId?: string;
     headTeacherId?: string;
   };
-  const db = getDB();
+  const db = await getDB();
 
   if (body.type === "grade") {
     if (user.role !== "principal") return jsonError("仅校长可新增年级", 403);
@@ -27,7 +27,7 @@ export async function POST(req: Request) {
       sortOrder: db.grades.length + 1,
     };
     db.grades.push(grade);
-    saveDB();
+    await saveDB();
     return NextResponse.json(grade);
   }
 
@@ -48,7 +48,7 @@ export async function POST(req: Request) {
       const t = db.teachers.find((x) => x.id === body.headTeacherId);
       if (t && !t.classIds.includes(cls.id)) t.classIds.push(cls.id);
     }
-    saveDB();
+    await saveDB();
     return NextResponse.json(cls);
   }
 
@@ -64,7 +64,7 @@ export async function DELETE(req: Request) {
   const { searchParams } = new URL(req.url);
   const type = searchParams.get("type");
   const id = searchParams.get("id");
-  const db = getDB();
+  const db = await getDB();
 
   if (type === "class" && id) {
     if (db.students.some((s) => s.classId === id)) {
@@ -74,7 +74,7 @@ export async function DELETE(req: Request) {
     db.teachers.forEach((t) => {
       t.classIds = t.classIds.filter((c) => c !== id);
     });
-    saveDB();
+    await saveDB();
     return NextResponse.json({ ok: true });
   }
   if (type === "grade" && id) {
@@ -82,7 +82,7 @@ export async function DELETE(req: Request) {
       return jsonError("该年级下仍有班级，请先删除班级");
     }
     db.grades = db.grades.filter((g) => g.id !== id);
-    saveDB();
+    await saveDB();
     return NextResponse.json({ ok: true });
   }
   return jsonError("参数错误");

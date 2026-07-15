@@ -1,55 +1,66 @@
-import fs from "node:fs";
-import path from "node:path";
 import { buildSeed } from "./seed";
+import { createPersistence, type Persistence } from "./persistence";
 import type { DB } from "./types";
 
 /**
- * 原型数据层：
- * - 本地开发：持久化到 .data/db.json（重启不丢数据）
- * - Vercel / 只读文件系统：内存存储（globalThis 缓存，冷启动后重置为种子数据）
- *
- * 生产版本将替换为 PostgreSQL + Redis（见 PRD 5.2）。
+ * 原型数据层（单文档模型 + 可插拔持久化驱动，见 lib/persistence.ts）：
+ * - 配置了 POSTGRES_URL / DATABASE_URL（如 Vercel + Supabase 集成）→ Postgres
+ * - 本地开发 → .data/db.json 文件
+ * - 只读文件系统且无数据库 → 内存（冷启动重置为种子数据）
  */
 
-const DATA_DIR = path.join(process.cwd(), ".data");
-const DATA_FILE = path.join(DATA_DIR, "db.json");
+const g = globalThis as unknown as {
+  __tutoringDB?: DB;
+  __tutoringPersistence?: Persistence;
+  __tutoringLoad?: Promise<DB>;
+};
 
-const canPersist = !process.env.VERCEL && !process.env.READONLY_FS;
+export function getPersistence(): Persistence {
+  if (!g.__tutoringPersistence) {
+    g.__tutoringPersistence = createPersistence();
+  }
+  return g.__tutoringPersistence;
+}
 
-const g = globalThis as unknown as { __tutoringDB?: DB };
+export async function getDB(): Promise<DB> {
+  if (g.__tutoringDB) return g.__tutoringDB;
+  if (!g.__tutoringLoad) {
+    g.__tutoringLoad = (async () => {
+      const persistence = getPersistence();
+      let db: DB | null = null;
+      try {
+        db = await persistence.load();
+      } catch (e) {
+        console.error(`[store] ${persistence.name} 加载失败，使用种子数据`, e);
+      }
+      if (!db) {
+        db = buildSeed();
+        try {
+          await persistence.save(db);
+        } catch (e) {
+          console.error(`[store] ${persistence.name} 初始化写入失败`, e);
+        }
+      }
+      g.__tutoringDB = db;
+      return db;
+    })();
+  }
+  return g.__tutoringLoad;
+}
 
-function loadFromDisk(): DB | null {
-  if (!canPersist) return null;
+export async function saveDB(): Promise<void> {
+  if (!g.__tutoringDB) return;
   try {
-    if (fs.existsSync(DATA_FILE)) {
-      return JSON.parse(fs.readFileSync(DATA_FILE, "utf-8")) as DB;
-    }
-  } catch {
-    // 文件损坏则重建种子数据
-  }
-  return null;
-}
-
-export function getDB(): DB {
-  if (!g.__tutoringDB) {
-    g.__tutoringDB = loadFromDisk() ?? buildSeed();
-  }
-  return g.__tutoringDB;
-}
-
-export function saveDB(): void {
-  if (!canPersist || !g.__tutoringDB) return;
-  try {
-    fs.mkdirSync(DATA_DIR, { recursive: true });
-    fs.writeFileSync(DATA_FILE, JSON.stringify(g.__tutoringDB));
-  } catch {
-    // 只读环境下静默降级为内存模式
+    await getPersistence().save(g.__tutoringDB);
+  } catch (e) {
+    console.error("[store] 保存失败", e);
   }
 }
 
-export function resetDB(): DB {
+export async function resetDB(): Promise<DB> {
   g.__tutoringDB = buildSeed();
-  saveDB();
+  g.__tutoringLoad = Promise.resolve(g.__tutoringDB);
+  await saveDB();
   return g.__tutoringDB;
 }
 

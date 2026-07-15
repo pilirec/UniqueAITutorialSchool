@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
-import { getDB, saveDB } from "@/lib/store";
+import { getDB, saveDB, getPersistence } from "@/lib/store";
 import { requireUser, jsonError } from "@/lib/api-helpers";
 import { PROVIDERS, getProvider } from "@/lib/ai/providers";
+import { getStorageDriverName } from "@/lib/storage";
 
 function maskKey(key: string): string {
   if (!key) return "";
@@ -12,7 +13,7 @@ function maskKey(key: string): string {
 export async function GET() {
   const { error } = await requireUser();
   if (error) return error;
-  const db = getDB();
+  const db = await getDB();
   return NextResponse.json({
     providers: PROVIDERS,
     settings: {
@@ -21,6 +22,10 @@ export async function GET() {
       baseUrl: db.aiSettings.baseUrl,
       apiKeyMasked: maskKey(db.aiSettings.apiKey),
       hasApiKey: Boolean(db.aiSettings.apiKey),
+    },
+    infra: {
+      dbDriver: getPersistence().name,
+      storageDriver: getStorageDriverName(),
     },
   });
 }
@@ -36,7 +41,7 @@ export async function PUT(req: Request) {
     apiKey?: string;
     baseUrl?: string;
   };
-  const db = getDB();
+  const db = await getDB();
   const provider = getProvider(body.provider ?? "mock");
 
   db.aiSettings.provider = provider.id;
@@ -50,6 +55,6 @@ export async function PUT(req: Request) {
   if (provider.id === "mock") {
     db.aiSettings.apiKey = db.aiSettings.apiKey || "";
   }
-  saveDB();
+  await saveDB();
   return NextResponse.json({ ok: true });
 }

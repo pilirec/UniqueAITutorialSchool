@@ -4,7 +4,7 @@ import { getDB } from "@/lib/store";
 
 export async function GET() {
   const user = await getCurrentUser();
-  const db = getDB();
+  const db = await getDB();
   return NextResponse.json({
     user,
     school: db.school,

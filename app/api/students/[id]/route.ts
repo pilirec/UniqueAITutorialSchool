@@ -12,14 +12,14 @@ export async function GET(
   const { user, error } = await requireUser();
   if (error) return error;
   const { id } = await params;
-  const db = getDB();
+  const db = await getDB();
   const student = db.students.find((s) => s.id === id);
   if (!student) return jsonError("学生不存在", 404);
-  if (!visibleClassIds(user).has(student.classId)) return jsonError("无权限查看该学生", 403);
+  if (!visibleClassIds(db, user).has(student.classId)) return jsonError("无权限查看该学生", 403);
 
   const cls = db.classes.find((c) => c.id === student.classId);
   const grade = db.grades.find((g) => g.id === cls?.gradeId);
-  const tasks = tasksForStudent(id).sort(
+  const tasks = tasksForStudent(db, id).sort(
     (a, b) => +new Date(b.createdAt) - +new Date(a.createdAt)
   );
   const records = db.behaviorRecords
@@ -31,7 +31,11 @@ export async function GET(
     className: cls?.name ?? "",
     gradeName: grade?.name ?? "",
     kpStats: aggregateKPStats(tasks),
-    gradingTasks: tasks.map((t) => ({ ...t, imageDataUrl: t.imageDataUrl ? t.imageDataUrl : "" })),
+    gradingTasks: tasks.map((t) => ({
+      ...t,
+      // 内联 base64 图片较大，学生主页 Timeline 不需要展示原图
+      imageSrc: t.imageSrc.startsWith("data:") ? "" : t.imageSrc,
+    })),
     behaviorRecords: records,
   });
 }

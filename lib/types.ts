@@ -3,6 +3,8 @@ export type Role = "principal" | "grade_leader" | "teacher";
 export interface School {
   id: string;
   name: string;
+  /** 校区 Logo（data URL、/api/files/... 或对象存储公开 URL），为空则使用默认图标 */
+  logoSrc: string;
 }
 
 export interface Grade {
@@ -80,7 +82,8 @@ export interface GradingTask {
   classId?: string;
   subject: Subject;
   imageMd5: string;
-  imageDataUrl: string;
+  /** 图片地址：data URL（内联）、/api/files/...（本地/S3 代理）或对象存储公开 URL */
+  imageSrc: string;
   imageName?: string;
   status: TaskStatus;
   provider: string;
