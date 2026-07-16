@@ -42,11 +42,16 @@ export async function GET(req: Request) {
 
   const studentStats = [...perStudent.entries()]
     .map(([studentId, s]) => {
-      const student = students.find((x) => x.id === studentId);
+      const student = students.find(
+        (candidate: { id: string }) => candidate.id === studentId
+      );
       return {
         studentId,
         name: student?.name ?? "未知",
-        className: classes.find((c) => c.id === student?.classId)?.name ?? "",
+        className:
+          classes.find(
+            (classRoom: { id: string }) => classRoom.id === student?.classId
+          )?.name ?? "",
         avatarColor: student?.avatarColor ?? "#6366f1",
         total: s.total,
         wrong: s.wrong,
