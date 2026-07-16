@@ -31,6 +31,7 @@ export default function LoginPage() {
   const [schoolName, setSchoolName] = useState("");
   const [logoSrc, setLogoSrc] = useState("");
   const [selected, setSelected] = useState<string>("");
+  const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
@@ -52,13 +53,13 @@ export default function LoginPage() {
   }, [router]);
 
   async function handleLogin() {
-    if (!selected) return;
+    if (!selected || !password) return;
     setLoading(true);
     setError("");
     try {
       await api("/api/auth/login", {
         method: "POST",
-        body: JSON.stringify({ teacherId: selected }),
+        body: JSON.stringify({ teacherId: selected, password }),
       });
       router.replace("/");
     } catch (e) {
@@ -85,7 +86,7 @@ export default function LoginPage() {
             {schoolName || DEFAULT_SCHOOL_NAME}
           </h1>
           <p className="text-sm text-slate-500 mt-1">
-            {SYSTEM_NAME} · 原型演示（V1.0）
+            {SYSTEM_NAME} · 安全加固版（V1.0）
           </p>
         </div>
 
@@ -133,16 +134,32 @@ export default function LoginPage() {
                 </button>
               ))}
             </div>
+            <div className="mb-4">
+              <label className="block text-xs font-medium text-slate-500 mb-1">
+                登录密码
+              </label>
+              <input
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && handleLogin()}
+                placeholder="默认密码：123456"
+                className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:border-indigo-500"
+              />
+              <p className="text-[10px] text-slate-400 mt-1">
+                演示账号默认密码为 123456，生产环境请务必修改
+              </p>
+            </div>
             {error && <p className="text-sm text-red-500 mb-3">{error}</p>}
             <button
               onClick={handleLogin}
-              disabled={loading || !selected}
+              disabled={loading || !selected || !password}
               className="w-full rounded-xl bg-indigo-600 text-white font-semibold py-3 hover:bg-indigo-700 transition-colors disabled:opacity-60"
             >
               {loading ? "登录中…" : "进入系统"}
             </button>
             <p className="text-center text-xs text-slate-400 mt-4">
-              演示环境免密码 · 数据为内置种子数据，可在系统内重置
+              已接入密码 + 服务端 Session + CSRF 防护
             </p>
           </>
         )}

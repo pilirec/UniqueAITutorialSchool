@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getDB } from "@/lib/store";
+import { prisma } from "@/lib/prisma";
 import { requireUser, jsonError } from "@/lib/api-helpers";
 import { visibleClassIds } from "@/lib/auth";
 import { aggregateKPStats, tasksForClasses } from "@/lib/analytics";
@@ -8,11 +8,10 @@ import { aggregateKPStats, tasksForClasses } from "@/lib/analytics";
 export async function GET(req: Request) {
   const { user, error } = await requireUser();
   if (error) return error;
-  const db = await getDB();
-  const visible = visibleClassIds(db, user);
   const { searchParams } = new URL(req.url);
   const classId = searchParams.get("classId");
 
+  const visible = await visibleClassIds(user);
   let scope: Set<string>;
   if (classId && classId !== "all") {
     if (!visible.has(classId)) return jsonError("无权限查看该班级", 403);
@@ -21,10 +20,9 @@ export async function GET(req: Request) {
     scope = visible;
   }
 
-  const tasks = tasksForClasses(db, scope).filter((t) => t.status === "success");
+  const tasks = (await tasksForClasses(scope)).filter((t) => t.status === "success");
   const kpStats = aggregateKPStats(tasks);
 
-  // 学生维度：正确率排名
   const perStudent = new Map<string, { total: number; wrong: number }>();
   for (const t of tasks) {
     if (!t.studentId) continue;
@@ -35,13 +33,20 @@ export async function GET(req: Request) {
     }
     perStudent.set(t.studentId, s);
   }
+
+  const studentIds = [...perStudent.keys()];
+  const students = studentIds.length
+    ? await prisma.student.findMany({ where: { id: { in: studentIds }, deletedAt: null } })
+    : [];
+  const classes = await prisma.classRoom.findMany({ select: { id: true, name: true } });
+
   const studentStats = [...perStudent.entries()]
     .map(([studentId, s]) => {
-      const student = db.students.find((x) => x.id === studentId);
+      const student = students.find((x) => x.id === studentId);
       return {
         studentId,
         name: student?.name ?? "未知",
-        className: db.classes.find((c) => c.id === student?.classId)?.name ?? "",
+        className: classes.find((c) => c.id === student?.classId)?.name ?? "",
         avatarColor: student?.avatarColor ?? "#6366f1",
         total: s.total,
         wrong: s.wrong,

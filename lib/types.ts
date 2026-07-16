@@ -28,6 +28,7 @@ export interface Teacher {
   name: string;
   role: Role;
   phone?: string;
+  email?: string;
   /** grade_leader 管辖的年级 */
   gradeId?: string;
   /** teacher 任教的班级 */

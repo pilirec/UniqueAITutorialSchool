@@ -1,5 +1,12 @@
 import { NextResponse } from "next/server";
-import { getDB } from "@/lib/store";
+import {
+  getSchool,
+  getGrades,
+  getClasses,
+  getTeachers,
+  getStudents,
+  getKnowledgePoints,
+} from "@/lib/db";
 import { requireUser } from "@/lib/api-helpers";
 import { visibleClassIds } from "@/lib/auth";
 
@@ -7,22 +14,29 @@ import { visibleClassIds } from "@/lib/auth";
 export async function GET() {
   const { user, error } = await requireUser();
   if (error) return error;
-  const db = await getDB();
-  const classIds = visibleClassIds(db, user);
-  const classes = db.classes.filter((c) => classIds.has(c.id));
-  const gradeIds = new Set(classes.map((c) => c.gradeId));
-  const grades =
-    user.role === "principal"
-      ? db.grades
-      : db.grades.filter((g) => gradeIds.has(g.id));
-  const students = db.students.filter((s) => classIds.has(s.classId));
+
+  const [school, grades, classes, teachers, students, knowledgePoints] = await Promise.all([
+    getSchool(),
+    getGrades(),
+    getClasses(),
+    getTeachers(),
+    getStudents(),
+    getKnowledgePoints(),
+  ]);
+
+  const classIds = await visibleClassIds(user);
+  const visibleClasses = classes.filter((c) => classIds.has(c.id));
+  const visibleGradeIds = new Set(visibleClasses.map((c) => c.gradeId));
+  const visibleGrades = user.role === "principal" ? grades : grades.filter((g) => visibleGradeIds.has(g.id));
+  const visibleStudents = students.filter((s) => classIds.has(s.classId));
+
   return NextResponse.json({
     user,
-    school: db.school,
-    grades: [...grades].sort((a, b) => a.sortOrder - b.sortOrder),
-    classes,
-    teachers: db.teachers,
-    students,
-    knowledgePoints: db.knowledgePoints,
+    school,
+    grades: visibleGrades.sort((a, b) => a.sortOrder - b.sortOrder),
+    classes: visibleClasses,
+    teachers,
+    students: visibleStudents,
+    knowledgePoints,
   });
 }

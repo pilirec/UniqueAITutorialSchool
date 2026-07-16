@@ -1,49 +1,79 @@
 import { NextResponse } from "next/server";
-import { getDB, saveDB, uid } from "@/lib/store";
-import { requireUser, jsonError } from "@/lib/api-helpers";
-import type { Role } from "@/lib/types";
+import bcrypt from "bcryptjs";
+import { prisma } from "@/lib/prisma";
+import { requireUserWithCsrf, jsonError } from "@/lib/api-helpers";
+import { teacherCreateSchema, validateJson } from "@/lib/validation";
+import { generatePassword } from "@/lib/auth";
+import { audit } from "@/lib/audit";
+import type { Teacher } from "@/lib/types";
 
 export async function POST(req: Request) {
-  const { user, error } = await requireUser();
+  const { user, error } = await requireUserWithCsrf(req);
   if (error) return error;
   if (user.role !== "principal") return jsonError("仅校长可管理教师", 403);
 
-  const body = (await req.json()) as {
-    name?: string;
-    role?: Role;
-    phone?: string;
-    gradeId?: string;
-    classIds?: string[];
+  const body = await validateJson(req, teacherCreateSchema);
+  if (!body.ok) return jsonError(body.error);
+
+  const { name, role, phone, gradeId, classIds } = body.data;
+  const password = generatePassword();
+  const passwordHash = await bcrypt.hash(password, 12);
+
+  const teacher = await prisma.$transaction(async (tx) => {
+    const t = await tx.teacher.create({
+      data: {
+        schoolId: user.schoolId,
+        name: name.trim(),
+        role,
+        phone: phone?.trim() || null,
+        gradeId: role === "grade_leader" ? gradeId || null : null,
+        passwordHash,
+      },
+    });
+    if (classIds?.length) {
+      await tx.teacherClassAssignment.createMany({
+        data: classIds.map((classId) => ({ teacherId: t.id, classId })),
+        skipDuplicates: true,
+      });
+    }
+    return tx.teacher.findUnique({
+      where: { id: t.id },
+      include: { classAssignments: { select: { classId: true } } },
+    });
+  });
+
+  if (!teacher) return jsonError("创建教师失败", 500);
+
+  const result: Teacher = {
+    id: teacher.id,
+    schoolId: teacher.schoolId,
+    name: teacher.name,
+    role: teacher.role as Teacher["role"],
+    phone: teacher.phone ?? undefined,
+    gradeId: teacher.gradeId ?? undefined,
+    classIds: teacher.classAssignments.map((ca) => ca.classId),
   };
-  if (!body.name?.trim()) return jsonError("请填写教师姓名");
-  const db = await getDB();
-  const teacher = {
-    id: uid("T"),
-    schoolId: db.school.id,
-    name: body.name.trim(),
-    role: body.role ?? "teacher",
-    phone: body.phone,
-    gradeId: body.role === "grade_leader" ? body.gradeId : undefined,
-    classIds: body.classIds ?? [],
-  };
-  db.teachers.push(teacher);
-  await saveDB();
-  return NextResponse.json(teacher);
+
+  await audit("teacher_created", `teacher:${teacher.id}`, { name, role }, { teacherId: user.id, schoolId: user.schoolId });
+
+  // 初始密码仅在创建时返回一次，后续应通过安全渠道分发
+  return NextResponse.json({ ...result, initialPassword: password });
 }
 
 export async function DELETE(req: Request) {
-  const { user, error } = await requireUser();
+  const { user, error } = await requireUserWithCsrf(req);
   if (error) return error;
   if (user.role !== "principal") return jsonError("仅校长可管理教师", 403);
-  const { searchParams } = new URL(req.url);
-  const id = searchParams.get("id");
+  const id = new URL(req.url).searchParams.get("id");
   if (!id) return jsonError("参数错误");
   if (id === user.id) return jsonError("不能删除自己");
-  const db = await getDB();
-  db.teachers = db.teachers.filter((t) => t.id !== id);
-  db.classes.forEach((c) => {
-    if (c.headTeacherId === id) c.headTeacherId = undefined;
-  });
-  await saveDB();
+
+  await prisma.$transaction([
+    prisma.teacherClassAssignment.deleteMany({ where: { teacherId: id } }),
+    prisma.session.deleteMany({ where: { teacherId: id } }),
+    prisma.teacher.delete({ where: { id } }),
+  ]);
+
+  await audit("teacher_deleted", `teacher:${id}`, {}, { teacherId: user.id, schoolId: user.schoolId });
   return NextResponse.json({ ok: true });
 }

@@ -1,4 +1,6 @@
-import type { DB, GradingTask } from "./types";
+import { prisma } from "./prisma";
+import { mapGradingTask } from "./db";
+import type { GradingTask } from "./types";
 
 export interface KPStat {
   kpId: string;
@@ -42,10 +44,19 @@ export function aggregateKPStats(tasks: GradingTask[]): KPStat[] {
   return [...map.values()].sort((a, b) => b.wrongRate - a.wrongRate || b.total - a.total);
 }
 
-export function tasksForStudent(db: DB, studentId: string): GradingTask[] {
-  return db.gradingTasks.filter((t) => t.studentId === studentId);
+export async function tasksForStudent(studentId: string): Promise<GradingTask[]> {
+  const tasks = await prisma.gradingTask.findMany({
+    where: { studentId },
+    include: { results: true },
+  });
+  return tasks.map(mapGradingTask);
 }
 
-export function tasksForClasses(db: DB, classIds: Set<string>): GradingTask[] {
-  return db.gradingTasks.filter((t) => t.classId && classIds.has(t.classId));
+export async function tasksForClasses(classIds: Set<string>): Promise<GradingTask[]> {
+  if (classIds.size === 0) return [];
+  const tasks = await prisma.gradingTask.findMany({
+    where: { classId: { in: [...classIds] } },
+    include: { results: true },
+  });
+  return tasks.map(mapGradingTask);
 }

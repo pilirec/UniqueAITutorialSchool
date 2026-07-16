@@ -1,0 +1,308 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model School {
+  id        String   @id @default(cuid())
+  name      String
+  logoSrc   String   @default("")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  grades          Grade[]
+  classes         ClassRoom[]
+  teachers        Teacher[]
+  students        Student[]
+  knowledgePoints KnowledgePoint[]
+  gradingTasks    GradingTask[]
+  behaviorRecords BehaviorRecord[]
+  sessions        Session[]
+  aiSettings      AISetting?
+}
+
+model Grade {
+  id        String   @id @default(cuid())
+  schoolId  String
+  name      String
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  school  School      @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  classes ClassRoom[]
+
+  @@index([schoolId])
+}
+
+model ClassRoom {
+  id             String  @id @default(cuid())
+  schoolId       String
+  gradeId        String
+  name           String
+  headTeacherId  String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  school     School    @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  grade      Grade     @relation(fields: [gradeId], references: [id], onDelete: Cascade)
+  headTeacher Teacher? @relation("HeadTeacher", fields: [headTeacherId], references: [id], onDelete: SetNull)
+  students   Student[]
+  teachers   TeacherClassAssignment[]
+
+  @@index([schoolId])
+  @@index([gradeId])
+}
+
+enum Role {
+  principal
+  grade_leader
+  teacher
+}
+
+model Teacher {
+  id           String   @id @default(cuid())
+  schoolId     String
+  name         String
+  role         Role
+  phone        String?
+  email        String?
+  passwordHash String   @default("")
+  gradeId      String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  school       School       @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  headOfClasses ClassRoom[] @relation("HeadTeacher")
+  classAssignments TeacherClassAssignment[]
+  gradingTasks GradingTask[]
+  behaviorRecords BehaviorRecord[]
+  sessions     Session[]
+
+  @@index([schoolId])
+  @@index([email])
+}
+
+model TeacherClassAssignment {
+  id        String   @id @default(cuid())
+  teacherId String
+  classId   String
+  createdAt DateTime @default(now())
+
+  teacher Teacher @relation(fields: [teacherId], references: [id], onDelete: Cascade)
+  class   ClassRoom @relation(fields: [classId], references: [id], onDelete: Cascade)
+
+  @@unique([teacherId, classId])
+  @@index([teacherId])
+  @@index([classId])
+}
+
+model Student {
+  id          String   @id @default(cuid())
+  schoolId    String
+  classId     String
+  name        String
+  gender      String   @default("男")
+  age         Int      @default(8)
+  parentPhone String?
+  avatarColor String   @default("#6366f1")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  deletedAt   DateTime?
+
+  school          School          @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  class           ClassRoom       @relation(fields: [classId], references: [id], onDelete: Cascade)
+  gradingTasks    GradingTask[]
+  behaviorRecords BehaviorRecord[]
+
+  @@index([schoolId])
+  @@index([classId])
+}
+
+enum Subject {
+  math
+  chinese
+}
+
+model KnowledgePoint {
+  id          String   @id @default(cuid())
+  schoolId    String
+  subject     Subject
+  name        String
+  status      String   @default("approved") // approved | pending
+  proposedBy  String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  school School @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+
+  @@unique([schoolId, subject, name])
+  @@index([schoolId])
+  @@index([subject])
+}
+
+enum TaskStatus {
+  processing
+  success
+  failed
+}
+
+model GradingTask {
+  id              String   @id @default(cuid())
+  schoolId        String
+  teacherId       String
+  studentId       String?
+  classId         String?
+  subject         Subject
+  imageMd5        String
+  imageSrc        String   @default("")
+  imageName       String?
+  status          TaskStatus @default(processing)
+  provider        String   @default("mock")
+  model           String   @default("")
+  error           String?
+  overallComment  String?
+  createdAt       DateTime @default(now())
+  finishedAt      DateTime?
+  updatedAt       DateTime @updatedAt
+
+  school   School          @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  teacher  Teacher         @relation(fields: [teacherId], references: [id], onDelete: Cascade)
+  student  Student?        @relation(fields: [studentId], references: [id], onDelete: SetNull)
+  results  GradingResult[]
+
+  @@index([schoolId])
+  @@index([teacherId])
+  @@index([studentId])
+  @@index([status])
+  @@index([createdAt])
+}
+
+model GradingResult {
+  id                   String   @id @default(cuid())
+  taskId               String
+  questionId           String
+  questionText         String?
+  isCorrect            Boolean
+  studentAnswer        String   @default("")
+  correctAnswer        String?
+  analysis             String   @default("")
+  knowledgePointId     String?
+  knowledgePointName   String?
+  knowledgePointSubject Subject?
+  confidence           Float    @default(0.8)
+  createdAt            DateTime @default(now())
+
+  task GradingTask @relation(fields: [taskId], references: [id], onDelete: Cascade)
+
+  @@index([taskId])
+}
+
+model BehaviorRecord {
+  id        String   @id @default(cuid())
+  schoolId  String
+  studentId String
+  teacherId String
+  type      String   @default("behavior") // behavior | homework | note
+  rawText   String
+  tags      Json     @default("[]")
+  summary   String   @default("")
+  provider  String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  school  School   @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  student Student  @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  teacher Teacher  @relation(fields: [teacherId], references: [id], onDelete: Cascade)
+
+  @@index([schoolId])
+  @@index([studentId])
+  @@index([teacherId])
+  @@index([createdAt])
+}
+
+model Session {
+  id        String   @id @default(cuid())
+  token     String   @unique
+  teacherId String
+  schoolId  String
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  teacher Teacher @relation(fields: [teacherId], references: [id], onDelete: Cascade)
+  school  School  @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+
+  @@index([token])
+  @@index([teacherId])
+  @@index([expiresAt])
+}
+
+model AISetting {
+  id       String @id @default(cuid())
+  schoolId String @unique
+  provider String @default("mock")
+  model    String @default("")
+  apiKey   String @default("") // AES encrypted
+  baseUrl  String @default("")
+  updatedAt DateTime @updatedAt
+
+  school School @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+}
+
+model AuditLog {
+  id        String   @id @default(cuid())
+  schoolId  String?
+  teacherId String?
+  action    String
+  resource  String
+  detail    Json     @default("{}")
+  ip        String?
+  userAgent String?
+  createdAt DateTime @default(now())
+
+  @@index([schoolId])
+  @@index([teacherId])
+  @@index([action])
+  @@index([createdAt])
+}
+
+enum JobStatus {
+  pending
+  processing
+  success
+  failed
+  cancelled
+}
+
+model JobQueue {
+  id           String    @id @default(cuid())
+  queueName    String
+  payload      Json
+  status       JobStatus @default(pending)
+  attempts     Int       @default(0)
+  maxAttempts  Int       @default(3)
+  error        String?
+  scheduledFor DateTime  @default(now())
+  processedAt  DateTime?
+  finishedAt   DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  @@index([queueName, status, scheduledFor])
+  @@index([status, scheduledFor])
+}
+
+model RateLimit {
+  id        String   @id @default(cuid())
+  key       String   @unique
+  windowStart DateTime @default(now())
+  count     Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([key])
+  @@index([windowStart])
+}
