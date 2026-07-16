@@ -33,14 +33,18 @@ export default function LoginPage() {
   const [selected, setSelected] = useState<string>("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
+  const [accountsLoading, setAccountsLoading] = useState(true);
   const [error, setError] = useState("");
 
-  useEffect(() => {
-    api<{
-      user: DemoAccount | null;
-      school: { name: string; logoSrc: string };
-      demoAccounts: DemoAccount[];
-    }>("/api/auth/me").then((data) => {
+  async function loadAccounts() {
+    setAccountsLoading(true);
+    setError("");
+    try {
+      const data = await api<{
+        user: DemoAccount | null;
+        school: { name: string; logoSrc: string };
+        demoAccounts: DemoAccount[];
+      }>("/api/auth/me");
       if (data.user) {
         router.replace("/");
         return;
@@ -49,7 +53,22 @@ export default function LoginPage() {
       setLogoSrc(data.school.logoSrc);
       setAccounts(data.demoAccounts);
       setSelected(data.demoAccounts[0]?.id ?? "");
-    });
+      if (data.demoAccounts.length === 0) {
+        setError("暂无可用账号，请先初始化系统数据。");
+      }
+    } catch (accountError) {
+      setError(
+        accountError instanceof Error
+          ? `账号加载失败：${accountError.message}`
+          : "账号加载失败，请稍后重试。"
+      );
+    } finally {
+      setAccountsLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    void loadAccounts();
   }, [router]);
 
   async function handleLogin() {
@@ -90,9 +109,20 @@ export default function LoginPage() {
           </p>
         </div>
 
-        {accounts.length === 0 ? (
+        {accountsLoading ? (
           <div className="flex justify-center py-8">
             <Spinner label="加载演示账号…" />
+          </div>
+        ) : accounts.length === 0 ? (
+          <div className="flex flex-col items-center gap-4 py-8 text-center">
+            <p className="text-sm text-red-600">{error || "暂无可用账号"}</p>
+            <button
+              type="button"
+              onClick={() => void loadAccounts()}
+              className="rounded-xl border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-50"
+            >
+              重新加载
+            </button>
           </div>
         ) : (
           <>
