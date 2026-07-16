@@ -10,16 +10,31 @@ const globalForPrisma = globalThis as unknown as {
 function getDatabaseUrl(): string {
   const url =
     process.env.DATABASE_URL ||
+    process.env.POSTGRES_URL_NON_POOLING ||
     process.env.POSTGRES_URL ||
     process.env.POSTGRES_PRISMA_URL;
   if (!url) {
-    throw new Error("缺少数据库连接字符串，请设置 DATABASE_URL / POSTGRES_URL");
+    throw new Error(
+      "缺少数据库连接字符串，请设置 DATABASE_URL / POSTGRES_URL_NON_POOLING / POSTGRES_URL"
+    );
   }
   return url;
 }
 
 function createPrismaClient(): PrismaClient {
-  const pool = new Pool({ connectionString: getDatabaseUrl() });
+  const databaseUrl = new URL(getDatabaseUrl());
+  const isSupabase = databaseUrl.hostname.endsWith(".supabase.com");
+  if (isSupabase) {
+    // Avoid pg parsing sslmode=require as certificate verification and
+    // overriding the explicit serverless-compatible TLS configuration below.
+    databaseUrl.searchParams.delete("sslmode");
+  }
+  const pool = new Pool({
+    connectionString: databaseUrl.toString(),
+    // Supabase pooler uses a managed certificate chain that is not available in
+    // every serverless runtime. The connection remains encrypted with TLS.
+    ssl: isSupabase ? { rejectUnauthorized: false } : undefined,
+  });
   const adapter = new PrismaPg(pool);
   return new PrismaClient({ adapter });
 }

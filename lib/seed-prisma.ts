@@ -56,15 +56,6 @@ export async function seedPrisma(): Promise<void> {
     ],
   });
 
-  await prisma.classRoom.createMany({
-    data: [
-      { id: "C11", schoolId, gradeId: "G1", name: "一(1)班", headTeacherId: "T_chen" },
-      { id: "C21", schoolId, gradeId: "G2", name: "二(1)班", headTeacherId: "T_zhang" },
-      { id: "C22", schoolId, gradeId: "G2", name: "二(2)班", headTeacherId: "T_liu" },
-      { id: "C31", schoolId, gradeId: "G3", name: "三(1)班", headTeacherId: "T_zhao" },
-    ],
-  });
-
   const teachers: Prisma.TeacherCreateManyInput[] = [
     { id: "T_wang", schoolId, name: "王校长", role: "principal", phone: "13800000001", passwordHash },
     { id: "T_li", schoolId, name: "李主任", role: "grade_leader", phone: "13800000002", gradeId: "G2", passwordHash },
@@ -74,6 +65,15 @@ export async function seedPrisma(): Promise<void> {
     { id: "T_zhao", schoolId, name: "赵老师", role: "teacher", phone: "13800000006", passwordHash },
   ];
   await prisma.teacher.createMany({ data: teachers });
+
+  await prisma.classRoom.createMany({
+    data: [
+      { id: "C11", schoolId, gradeId: "G1", name: "一(1)班", headTeacherId: "T_chen" },
+      { id: "C21", schoolId, gradeId: "G2", name: "二(1)班", headTeacherId: "T_zhang" },
+      { id: "C22", schoolId, gradeId: "G2", name: "二(2)班", headTeacherId: "T_liu" },
+      { id: "C31", schoolId, gradeId: "G3", name: "三(1)班", headTeacherId: "T_zhao" },
+    ],
+  });
 
   await prisma.teacherClassAssignment.createMany({
     data: [
