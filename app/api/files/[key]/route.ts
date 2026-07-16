@@ -50,7 +50,10 @@ async function canAccessFile(user: Teacher, key: string, fileUrl: string): Promi
     });
     if (tasks.length === 0) return false;
     const classIds = await visibleClassIds(user);
-    return tasks.some((t) => (t.classId ? classIds.has(t.classId) : t.teacherId === user.id));
+    return tasks.some(
+      (task: { classId: string | null; teacherId: string }) =>
+        task.classId ? classIds.has(task.classId) : task.teacherId === user.id
+    );
   }
 
   return false;
